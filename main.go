@@ -1,8 +1,11 @@
 package main
 
 import (
+	"InvoiceMS/config"
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,11 +15,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewRouter() *gin.Engine {
+func NewRouter(serverPort ...string) *gin.Engine {
+	configuredPort := ""
+	if len(serverPort) > 0 {
+		configuredPort = serverPort[0]
+	}
+
 	router := gin.New()
 	router.Use(gin.Recovery())
 	router.GET("/health/live", LiveHealthHandler())
-	router.GET("/ping", ServerPingHandler())
+	router.GET("/ping", ServerPingHandler(configuredPort))
 	return router
 }
 
@@ -26,18 +34,38 @@ func LiveHealthHandler() gin.HandlerFunc {
 	}
 }
 
+func ServerPingHandler(serverPort string) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		message := "Server is running"
+		if serverPort != "" {
+			message = fmt.Sprintf("Server is running on Port %s", serverPort)
+		}
+		ctx.JSON(http.StatusOK, message)
+	}
+}
+
 func main() {
 
-	router := NewRouter()
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		log.Fatalf("load configuration: %v", err)
+	}
+
+	router := NewRouter(cfg.ServerPort)
 
 	serve := &http.Server{
-		Addr:    ":8383",
+		Addr:    cfg.ServerPort,
 		Handler: router.Handler(),
+	}
+
+	listener, err := net.Listen(cfg.NetworkProtocol, cfg.ServerPort)
+	if err != nil {
+		log.Fatalf("listen on %s %s: %v", cfg.NetworkProtocol, cfg.ServerPort, err)
 	}
 
 	go func() {
 		// service connections
-		if err := serve.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := serve.Serve(listener); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Listen: %s\n", err)
 		}
 	}()
@@ -65,10 +93,4 @@ func main() {
 		log.Println("timeout of 5 seconds")
 	}
 	log.Println("Server Existing ...")
-}
-
-func ServerPingHandler() gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		ctx.JSON(http.StatusOK, "Server is runnning on Port 8383")
-	}
 }
