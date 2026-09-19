@@ -12,11 +12,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func NewRouter() *gin.Engine {
+	router := gin.New()
+	router.Use(gin.Recovery())
+	router.GET("/health/live", LiveHealthHandler())
+	router.GET("/ping", ServerPingHandler())
+	return router
+}
+
+func LiveHealthHandler() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		ctx.JSON(http.StatusOK, gin.H{"status": "ok"})
+	}
+}
+
 func main() {
 
-	router := gin.Default()
-
-	router.GET("/ping", ServerPingHandler())
+	router := NewRouter()
 
 	serve := &http.Server{
 		Addr:    ":8383",
